@@ -1,0 +1,6 @@
+<launch>
+
+    <node pkg="drone_controller" type="PID_controller.py" name="PID_controller" output="screen"></node>
+    <node pkg="drone" type="ps_control.py" name="ps_control" output="screen"></node>
+
+</launch>

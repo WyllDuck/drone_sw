@@ -18,10 +18,17 @@ class PID:
     def __init__ (self, sample_time = 0.1, N = 1, lim_output = [-1, -1], ROS_current_time = None):
 
         self.N = N # Number of degrees
-
-        self.max_output = lim_output[1] # if -1 their is no upper limit
-        self.min_output = lim_output[0] # if -1 their is no upper limit
-
+        
+        # NOTE: their is no upper limit if lim_output equal -1, 
+        if (lim_output[1] == -1):
+            self.max_output = 1e10
+        else: 
+            self.max_output = lim_output[1]
+        if (lim_output[0] == -1):
+            self.min_output = -1e10
+        else: 
+            self.min_output = lim_output[0]
+        
         # PID Paramenters
         self.Kp = np.zeros(self.N)
         self.Ki = np.zeros(self.N)
@@ -67,17 +74,23 @@ class PID:
         self.ROS_current_time = ROS_current_time if ROS_current_time is not None else rospy.Time.now()
         delta_time = (self.ROS_current_time - self.ROS_last_time).to_sec()
 
+        error = feedback_values - set_points
+
         # Derivate Term
-        self.DTerm = feedback_values
+        self.DTerm = error
 
         # Proportional Term
-        self.PTerm += feedback_values * delta_time
+        self.PTerm += error * delta_time
         
         # Integration Term
         self.ITerm = self.PTerm * delta_time
 
         # Calculate Output
-        output = (self.Kp * self.PTerm) + (self.Ki * self.ITerm) + (self.Kd * self.DTerm)
+        error = (self.Kp * self.PTerm) + (self.Ki * self.ITerm) + (self.Kd * self.DTerm)
+
+        # NOTE: this process returns a matrix but we want only the first row, an array
+        output = np.matmul(self.A, self.B * error)
+        output = np.squeeze(np.array(output))
     
         """
         Anti Windup
@@ -92,13 +105,15 @@ class PID:
         The specific problem is the excess overshooting.
         """
         
-        if (output < self.min_output):
-            output = self.min_output
-            self.ITerm -= feedback_values * delta_time # Undo by subtituting the integration by 0
+        if (np.any(output < self.min_output)):
+            for i in np.where(output < self.min_output):
+                output[i] = self.min_output
+                self.ITerm[i] -= self.PTerm[i] * delta_time # Undo by subtituting the integration by 0
 
-        elif (output > self.max_output):
-            output = self.max_output
-            self.ITerm -= feedback_values * delta_time # Undo by subtituting the integration by 0
+        if (np.any(output > self.max_output)):
+            for i in np.where(output > self.max_output):
+                output[i] = self.max_output
+                self.ITerm[i] -= self.PTerm[i] * delta_time # Undo by subtituting the integration by 0
 
         # Remember last time and last error for next calculation
         self.ROS_last_time = self.ROS_current_time
@@ -139,6 +154,7 @@ class Controller:
     def __init__ (self, _file):
 
         # Import Parameters Drone
+        _file = open(_file, "r")
         p = yaml.load(_file, Loader=yaml.FullLoader)
 
         # Subscribers & Publishers
@@ -149,23 +165,31 @@ class Controller:
         
         self.sub_vel_ang = rospy.Subscriber("/truth/local/angular/velocity", Vector3Stamped, self.callback_feedback, queue_size = 1)
 
-        self.pub_command1 = rospy.Publisher('/command/1', Float32, queue_size = 1)
-        self.pub_command2 = rospy.Publisher('/command/2', Float32, queue_size = 1)
-        self.pub_command3 = rospy.Publisher('/command/3', Float32, queue_size = 1)
-        self.pub_command4 = rospy.Publisher('/command/4', Float32, queue_size = 1)
+        self.pub_command1 = rospy.Publisher("/command/1", Float32, queue_size = 1)
+        self.pub_command2 = rospy.Publisher("/command/2", Float32, queue_size = 1)
+        self.pub_command3 = rospy.Publisher("/command/3", Float32, queue_size = 1)
+        self.pub_command4 = rospy.Publisher("/command/4", Float32, queue_size = 1)
 
         # Declare PID Module
-        self.pid = PID()
+        self.pid = PID(0.005, 4)
+
+        k = p["k"]
+        lr = p["lr"]
+        lf = p["lf"]
+        s = p["s"]
+        b = p["b"]
 
         # error -> output
-        A = np.matrix( [[p.k      , p.k     , p.k     , p.k     ],
-                        [p.L*p.k    , 0     , - p.L*p.k , 0     ],
-                        [0      , p.L*p.k   , 0     , -p.L*p.k  ],
-                        [p.b      , -p.b    , p.b     , -p.b    ]])
+        A = np.matrix( [[k      , k     , k     , k     ],
+                        [-lf*k  , lr*k  , lr*k  , -lf*k ],
+                        [-s*k   , -s*k  , s*k   , s*k   ],
+                        [b      , -b    , b     , -b    ]])
         A = np.linalg.inv(A)
         self.pid.setAMatrix(A)
+
+        i = p["inertial"]
         
-        B = np.array([1, p.Ixx, p.Iyy, p.Izz])
+        B = np.array([1, i["xx"], i["yy"], i["zz"]])
         self.pid.setBVector(B)
 
         # Storage Values
