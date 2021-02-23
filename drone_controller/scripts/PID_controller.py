@@ -85,8 +85,8 @@ class PID:
     def update (self, feedback_values, set_points, ROS_current_time = None):
 
         # Save Values | Useful during debugging
-        self.feedback_values = feedback_values
-        self.set_points = set_points
+        self.feedback_values = feedback_values # Thrust, Roll, Pitch, Yaw
+        self.set_points = set_points # Thrust, Roll, Pitch, Yaw
 
         """
         # Current Time & Error
@@ -105,10 +105,11 @@ class PID:
         deviation = self.set_points - self.feedback_values
 
         # Derivate Term
-        self.DTerm = deviation
+        # NOTE: The Thrust component (position 0), can be set to 0 since we are currently not adding any Kd for it.
+        self.DTerm = np.concatenate((np.array([0]), deviation[1:4]))
 
         # Proportional Term
-        self.PTerm += deviation * delta_time
+        self.PTerm += np.concatenate((np.array([deviation[0]]), deviation[1:4] * delta_time))
         
         # Integration Term
         self.ITerm = self.PTerm * delta_time
@@ -263,12 +264,12 @@ class Controller:
         self.lim_roll = np.pi / 4
         self.lim_pitch = np.pi / 4
         self.lim_yaw = np.pi / 4
-        self.lim_thrust = 10
+        self.lim_thrust = [-5, 10]
 
         # Set Kp, Ki, Kd Arrays
         # NOTE: Thrust must NOT be treated as a PID controller, it is only use to solve the equation, 
         # thus KpT = 1, and KiT = KdT = 0
-        Kp = np.array([1, 0.1, 0.1, 0.1]) # Thrust, Roll, Pitch, Yaw
+        Kp = np.array([1, 2, 2, 2]) # Thrust, Roll, Pitch, Yaw
         self.pid.setKp(Kp)
 
         Ki = np.array([0, 0.1, 0.1, 0.1]) # Thrust, Roll, Pitch, Yaw
@@ -314,10 +315,10 @@ class Controller:
             self.set_points[3] = msg.data
     
     def callback_thrust (self, msg):
-        if (msg.data > self.lim_thrust):
-            self.set_points[0] = self.lim_thrust
-        elif (msg.data < 0):
-            self.set_points[0] = 0
+        if (msg.data > self.lim_thrust[1]):
+            self.set_points[0] = self.lim_thrust[1]
+        elif (msg.data < self.lim_thrust[0]):
+            self.set_points[0] = self.lim_thrust[0]
         else:
             self.set_points[0] = msg.data
 

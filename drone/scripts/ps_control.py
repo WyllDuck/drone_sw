@@ -36,16 +36,16 @@ class PSControl:
 
         # ROS Publisher
         pub = rospy.Publisher("/input/roll", Float32, queue_size = 1)
-        self.states.append({"pub": pub, "state": 0, "axis": 2, "sign": 1, "offset": 0})
+        self.states.append({"pub": pub, "state": 0, "axis": 2, "scale": 1, "offset": 0})
 
         pub = rospy.Publisher("/input/pitch", Float32, queue_size = 1)
-        self.states.append({"pub": pub, "state": 0, "axis": 5, "sign": 1, "offset": 0})
+        self.states.append({"pub": pub, "state": 0, "axis": 5, "scale": 1, "offset": 0})
 
         pub = rospy.Publisher("/input/yaw", Float32, queue_size = 1)
-        self.states.append({"pub": pub, "state": 0, "axis": 0, "sign": -1, "offset": 0})
+        self.states.append({"pub": pub, "state": 0, "axis": 0, "scale": -1, "offset": 0})
         
         pub = rospy.Publisher("/input/thrust", Float32, queue_size = 1)
-        self.states.append({"pub": pub, "state": 0, "axis": 1, "sign": -1, "offset": 1})
+        self.states.append({"pub": pub, "state": 0, "axis": 1, "scale": -0.25, "offset": 0})
 
         # Status
         self.operational = True
@@ -57,7 +57,7 @@ class PSControl:
         
         for i in range(len(self.states)):
             axis = self.joystick.get_axis(self.states[i]["axis"])
-            self.states[i]["state"] = axis * self.states[i]["sign"] + self.states[i]["offset"]
+            self.states[i]["state"] = axis * self.states[i]["scale"] + self.states[i]["offset"]
 
 
     def run (self):
