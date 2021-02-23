@@ -4,6 +4,7 @@
 import rospy
 from geometry_msgs.msg import Vector3Stamped
 from std_msgs.msg import Float32
+from sensor_msgs.msg import Imu
 
 # Tools
 import numpy as np
@@ -163,7 +164,7 @@ class Controller:
         self.sub_yaw = rospy.Subscriber("/input/yaw", Float32, self.callback_yaw, queue_size = 1)
         self.sub_thrust = rospy.Subscriber("/input/thrust", Float32, self.callback_thrust, queue_size = 1)
         
-        self.sub_vel_ang = rospy.Subscriber("/truth/local/angular/velocity", Vector3Stamped, self.callback_feedback, queue_size = 1)
+        self.sub_imu = rospy.Subscriber("/imu", Imu, self.callback_feedback, queue_size = 1)
 
         self.pub_command1 = rospy.Publisher("/command/1", Float32, queue_size = 1)
         self.pub_command2 = rospy.Publisher("/command/2", Float32, queue_size = 1)
@@ -197,14 +198,10 @@ class Controller:
         self.set_points = np.zeros(self.pid.N) # Control Inputs
 
         # Limit Inputs 
-        self.lim_roll = np.pi/4
-        self.lim_pitch = np.pi/4
-        self.lim_yaw = np.pi/4
+        self.lim_roll = np.pi / 4
+        self.lim_pitch = np.pi / 4
+        self.lim_yaw = np.pi / 4
         self.lim_thrust = 10
-
-    # Numerical Integration - Trapezoidal Theorem
-    def integrate(self, fa, fb, delta_time):
-        return delta_time * (fa + fb) / 2
 
     # Loop
     def update (self):
@@ -215,27 +212,35 @@ class Controller:
     def callback_feedback(self, msg):
         
         # Angular Valocities - Local Frame
-        self.feedback_values[0] = msg[0]
-        self.feedback_values[1] = msg[1]
-        self.feedback_values[2] = msg[2]
+        self.feedback_values[0] = msg.angular_velocity.x
+        self.feedback_values[1] = msg.angular_velocity.y
+        self.feedback_values[2] = msg.angular_velocity.z
 
     def callback_roll (self, msg):
-        if (abs(msg) > self.lim_roll):
-            self.set_points[1] = np.sign(msg) * self.lim_roll
+        if (abs(msg.data) > self.lim_roll):
+            self.set_points[1] = np.sign(msg.data) * self.lim_roll
+        else: 
+            self.set_points[1] = msg.data
 
     def callback_pitch (self, msg):
-        if (abs(msg) > self.lim_pitch):
-            self.set_points[2] = np.sign(msg) * self.lim_pitch
+        if (abs(msg.data) > self.lim_pitch):
+            self.set_points[2] = np.sign(msg.data) * self.lim_pitch
+        else:
+            self.set_points[2] = msg.data
     
     def callback_yaw (self, msg):
-        if (abs(msg) > self.lim_yaw):
-            self.set_points[3] = np.sign(msg) * self.lim_yaw
+        if (abs(msg.data) > self.lim_yaw):
+            self.set_points[3] = np.sign(msg.data) * self.lim_yaw
+        else:
+            self.set_points[3] = msg.data
     
     def callback_thrust (self, msg):
-        if (msg > self.lim_thrust):
+        if (msg.data > self.lim_thrust):
             self.set_points[0] = self.lim_thrust
-        elif (msg < 0):
+        elif (msg.data < 0):
             self.set_points[0] = 0
+        else:
+            self.set_points[0] = msg.data
 
     # Publish State
     def publish (self, output):
