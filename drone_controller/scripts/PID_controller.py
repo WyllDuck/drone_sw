@@ -1,5 +1,26 @@
 #!/usr/bin/env python
 
+# Copyright (c) 2020 Authors:
+#   - Félix Martí Valverde <martivalverde@hotmail.com>
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 # ROS
 import rospy
 from geometry_msgs.msg import Vector3Stamped
@@ -20,7 +41,7 @@ class PID:
 
         self.N = N # Number of degrees
         
-        # NOTE: their is no upper limit if lim_output equal -1, 
+        # NOTE: their is no upper limit if "lim_output" equal -1, 
         if (lim_output[1] == -1):
             self.max_output = 1e10
         else: 
@@ -46,6 +67,11 @@ class PID:
         self.A = np.eye(self.N)
         self.B = np.ones(self.N)
 
+        # Storage
+        self.output = np.zeros(self.N)
+        self.error = np.zeros(self.N)
+        self.feedback_values = np.zeros(self.N - 1) # Roll Pitch Yaw
+        self.set_points = np.zeros(self.N)
 
     # Clears PID computations and coefficients
     def clear (self):
@@ -54,12 +80,13 @@ class PID:
         self.ITerm = np.zeros(self.N)
         self.DTerm = np.zeros(self.N)
 
-        self.last_error = np.zeros(self.N)
-        self.int_error = np.zeros(self.N)
-
 
     # Calculates PID value for given reference feedback
     def update (self, feedback_values, set_points, ROS_current_time = None):
+
+        # Save Values | Useful during debugging
+        self.feedback_values = feedback_values
+        self.set_points = set_points
 
         """
         # Current Time & Error
@@ -75,23 +102,23 @@ class PID:
         self.ROS_current_time = ROS_current_time if ROS_current_time is not None else rospy.Time.now()
         delta_time = (self.ROS_current_time - self.ROS_last_time).to_sec()
 
-        error = feedback_values - set_points
+        deviation = self.set_points - self.feedback_values
 
         # Derivate Term
-        self.DTerm = error
+        self.DTerm = deviation
 
         # Proportional Term
-        self.PTerm += error * delta_time
+        self.PTerm += deviation * delta_time
         
         # Integration Term
         self.ITerm = self.PTerm * delta_time
 
         # Calculate Output
-        error = (self.Kp * self.PTerm) + (self.Ki * self.ITerm) + (self.Kd * self.DTerm)
+        self.error = (self.Kp * self.PTerm) + (self.Ki * self.ITerm) + (self.Kd * self.DTerm)
 
         # NOTE: this process returns a matrix but we want only the first row, an array
-        output = np.matmul(self.A, self.B * error)
-        output = np.squeeze(np.array(output))
+        self.output = np.matmul(self.A, self.B * self.error)
+        self.output = np.squeeze(np.array(self.output))
     
         """
         Anti Windup
@@ -106,20 +133,20 @@ class PID:
         The specific problem is the excess overshooting.
         """
         
-        if (np.any(output < self.min_output)):
-            for i in np.where(output < self.min_output):
-                output[i] = self.min_output
+        if (np.any(self.output < self.min_output)):
+            for i in np.where(self.output < self.min_output):
+                self.output[i] = self.min_output
                 self.ITerm[i] -= self.PTerm[i] * delta_time # Undo by subtituting the integration by 0
 
-        if (np.any(output > self.max_output)):
-            for i in np.where(output > self.max_output):
-                output[i] = self.max_output
+        if (np.any(self.output > self.max_output)):
+            for i in np.where(self.output > self.max_output):
+                self.output[i] = self.max_output
                 self.ITerm[i] -= self.PTerm[i] * delta_time # Undo by subtituting the integration by 0
 
         # Remember last time and last error for next calculation
         self.ROS_last_time = self.ROS_current_time
 
-        return output
+        return self.output
 
 
     def setKp (self, proportional_gain):
@@ -147,6 +174,39 @@ class PID:
         self.B = B
 
 
+    # Debug
+    def debug (self):
+
+        print("\n{:^20}".format("OUTPUTS"))
+
+        print("motor1:{:>13.2f}".format(self.output[0]))
+        print("motor2:{:>13.2f}".format(self.output[1]))
+        print("motor3:{:>13.2f}".format(self.output[2]))
+        print("motor4:{:>13.2f}".format(self.output[3]))
+
+        print("\n{:^20}".format("ERROR"))
+
+        print("thrust:{:>13.2f}".format(self.error[0]))
+        print("roll:{:>15.2f}".format(self.error[1]))
+        print("pitch:{:>14.2f}".format(self.error[2]))
+        print("yaw:{:>16.2f}".format(self.error[3]))
+
+        print("\n{:^20}".format("SET POINTS"))
+
+        print("thrust:{:>13.2f}".format(self.set_points[0]))
+        print("roll:{:>15.2f}".format(self.set_points[1]))
+        print("pitch:{:>14.2f}".format(self.set_points[2]))
+        print("yaw:{:>16.2f}".format(self.set_points[3]))
+
+        print("\n{:^20}".format("FEEDBACK"))
+
+        print("roll:{:>15.2f}".format(self.feedback_values[0]))
+        print("pitch:{:>14.2f}".format(self.feedback_values[1]))
+        print("yaw:{:>16.2f}".format(self.feedback_values[2]))
+
+        print("====================")
+
+
 """
 ROS Adaptation Module
 """
@@ -172,7 +232,7 @@ class Controller:
         self.pub_command4 = rospy.Publisher("/command/4", Float32, queue_size = 1)
 
         # Declare PID Module
-        self.pid = PID(0.005, 4)
+        self.pid = PID(0.05, 4) # 20 Hz
 
         k = p["k"]
         lr = p["lr"]
@@ -181,10 +241,10 @@ class Controller:
         b = p["b"]
 
         # error -> output
-        A = np.matrix( [[k      , k     , k     , k     ],
-                        [-lf*k  , lr*k  , lr*k  , -lf*k ],
-                        [-s*k   , -s*k  , s*k   , s*k   ],
-                        [b      , -b    , b     , -b    ]])
+        A = np.matrix( [[k      , k     , k     , k     ],  # Thrust
+                        [-lf*k  , lr*k  , lr*k  , -lf*k ],  # Roll  (X)
+                        [-s*k   , -s*k  , s*k   , s*k   ],  # Pitch (Y)
+                        [b      , -b    , b     , -b    ]]) # Yaw   (Z)
         A = np.linalg.inv(A)
         self.pid.setAMatrix(A)
 
@@ -192,6 +252,8 @@ class Controller:
         
         B = np.array([1, i["xx"], i["yy"], i["zz"]])
         self.pid.setBVector(B)
+
+        self.mass = p["mass"]
 
         # Storage Values
         self.feedback_values = np.zeros(self.pid.N) # State
@@ -203,18 +265,35 @@ class Controller:
         self.lim_yaw = np.pi / 4
         self.lim_thrust = 10
 
+        # Set Kp, Ki, Kd Arrays
+        # NOTE: Thrust must NOT be treated as a PID controller, it is only use to solve the equation, 
+        # thus KpT = 1, and KiT = KdT = 0
+        Kp = np.array([1, 0.1, 0.1, 0.1]) # Thrust, Roll, Pitch, Yaw
+        self.pid.setKp(Kp)
+
+        Ki = np.array([0, 0.1, 0.1, 0.1]) # Thrust, Roll, Pitch, Yaw
+        self.pid.setKi(Ki)
+
+        Kd = np.array([0, 0, 0, 0]) # Thrust, Roll, Pitch, Yaw
+        self.pid.setKd(Kd)
+
+
     # Loop
-    def update (self):
+    def update (self, debug = False):
         output = self.pid.update(self.feedback_values, self.set_points)
         self.publish(output)
+
+        if debug: 
+            self.pid.debug()
 
     # Callback Functions
     def callback_feedback(self, msg):
         
         # Angular Valocities - Local Frame
-        self.feedback_values[0] = msg.angular_velocity.x
-        self.feedback_values[1] = msg.angular_velocity.y
-        self.feedback_values[2] = msg.angular_velocity.z
+        self.feedback_values[0] = msg.linear_acceleration.z * self.mass
+        self.feedback_values[1] = msg.angular_velocity.x
+        self.feedback_values[2] = msg.angular_velocity.y
+        self.feedback_values[3] = msg.angular_velocity.z
 
     def callback_roll (self, msg):
         if (abs(msg.data) > self.lim_roll):
@@ -266,5 +345,5 @@ if __name__ == "__main__":
     # Loop At Controller Rate
     while not rospy.is_shutdown():
 
-        controller.update()
+        controller.update(debug = True)
         rate.sleep()
