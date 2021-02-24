@@ -45,7 +45,7 @@ class PSControl:
         self.states.append({"pub": pub, "state": 0, "axis": 0, "scale": -1, "offset": 0})
         
         pub = rospy.Publisher("/input/thrust", Float32, queue_size = 1)
-        self.states.append({"pub": pub, "state": 0, "axis": 1, "scale": -0.25, "offset": 0})
+        self.states.append({"pub": pub, "state": 0, "axis": 1, "scale": -1, "offset": 0})
 
         # Status
         self.operational = True

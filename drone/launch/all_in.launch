@@ -1,6 +1,11 @@
 <launch>
 
+    <!-- PID Controller -->
     <node pkg="drone_controller" type="PID_controller.py" name="PID_controller" output="screen"></node>
+    <node name="dynamic_reconfigure_load" pkg="dynamic_reconfigure" type="dynparam" 
+          args="load /PID_controller $(find drone_controller)/conf/gains_PID.yaml" />
+
+    <!-- JoyStick -->
     <node pkg="drone" type="ps_control.py" name="ps_control" output="screen"></node>
 
 </launch>
