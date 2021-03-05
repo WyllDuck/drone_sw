@@ -39,7 +39,7 @@ class PSControl:
         self.states.append({"pub": pub, "state": 0, "axis": 2, "scale": 1, "offset": 0})
 
         pub = rospy.Publisher("/input/pitch", Float32, queue_size = 1)
-        self.states.append({"pub": pub, "state": 0, "axis": 5, "scale": 1, "offset": 0})
+        self.states.append({"pub": pub, "state": 0, "axis": 5, "scale": -1, "offset": 0})
 
         pub = rospy.Publisher("/input/yaw", Float32, queue_size = 1)
         self.states.append({"pub": pub, "state": 0, "axis": 0, "scale": -1, "offset": 0})
