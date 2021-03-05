@@ -83,29 +83,19 @@ class PID:
         self.PTerm = np.zeros(self.N)
         self.ITerm = np.zeros(self.N)
         self.DTerm = np.zeros(self.N)
-
-        self.gyroscopic_orientation = np.zeros(self.N - 1) # Roll Pitch Yaw
+        
+        self.current_Pterm = np.zeros(self.N)
     
     def obtainPIDTerms (self, delta_time):
 
-        # Update Gyroscopic Orientation
-        self.gyroscopic_orientation += self.feedback_values[1:4] * delta_time
-        if (np.any(abs(self.gyroscopic_orientation) > np.pi)):
-            for i in np.where(abs(self.gyroscopic_orientation > np.pi)):
-                self.gyroscopic_orientation[i] -= np.sign(self.gyroscopic_orientation[i]) * 2 * np.pi
+        # Current Error
+        self.current_Pterm = self.set_points - self.feedback_values
 
-        # P Term (Current Error)
-        self.PTerm[0] = self.set_points[0] - self.feedback_values[0]
-        self.PTerm[1:4] = self.set_points[1:4] - self.gyroscopic_orientation
+        # PID error States
+        self.DTerm = self.PTerm - self.current_Pterm
+        self.PTerm = self.current_Pterm
+        self.ITerm += self.PTerm * delta_time
 
-        # I Term (Integral of the Error)
-        self.ITerm[0] += self.PTerm[0] * delta_time
-        self.ITerm[1:4] += - self.PTerm[1:4] * delta_time
-
-        # D Term (Derivative of the Error)
-        self.DTerm[0] = 0 # Not interested in this value
-        self.DTerm[1:4] = - self.feedback_values[1:4]
-            
     # Calculates PID value for given reference feedback
     def update (self, feedback_values, set_points, ROS_current_time = None):
 
@@ -216,7 +206,7 @@ ROS Adaptation Module
 """
 class Controller:
 
-    def __init__ (self, _file):
+    def __init__ (self, _file, truth = False):
 
         # Import Parameters Drone
         _file = open(_file, "r")
@@ -228,7 +218,10 @@ class Controller:
         self.sub_yaw = rospy.Subscriber("/input/yaw", Float32, self.callback_yaw, queue_size = 1)
         self.sub_thrust = rospy.Subscriber("/input/thrust", Float32, self.callback_thrust, queue_size = 1)
         
-        self.sub_imu = rospy.Subscriber("/imu", Imu, self.callback_feedback, queue_size = 1)
+        if not truth:
+            self.sub_imu = rospy.Subscriber("/imu", Imu, self.callback_feedback, queue_size = 1)
+        else:
+            self.sub_truth = rospy.Subscriber("/truth/local/angular/velocity", Vector3Stamped, self.callback_truth, queue_size = 1)
 
         self.pub_command1 = rospy.Publisher("/command/1", Float32, queue_size = 1)
         self.pub_command2 = rospy.Publisher("/command/2", Float32, queue_size = 1)
@@ -292,11 +285,19 @@ class Controller:
     # Callback Functions
     def callback_feedback(self, msg):
         
-        # Angular Valocities - Local Frame
+        # Angular Velocities - Local Frame
         self.feedback_values[0] = msg.linear_acceleration.z * self.mass
         self.feedback_values[1] = msg.angular_velocity.x
         self.feedback_values[2] = msg.angular_velocity.y
         self.feedback_values[3] = msg.angular_velocity.z
+
+    def callback_truth(self, msg):
+        
+        # Angular Velocities - Local Frame
+        self.feedback_values[0] = 0
+        self.feedback_values[1] = msg.vector.x
+        self.feedback_values[2] = msg.vector.y
+        self.feedback_values[3] = msg.vector.z
 
     def callback_roll (self, msg):
         if (abs(msg.data) > self.lim_roll):
@@ -358,7 +359,7 @@ if __name__ == "__main__":
     rospy.init_node("PID_controller")
     
     # Declare Trajectory to Planner Function
-    controller = Controller("/home/felix/Desktop/ws_drone/src/drone_sw/drone_controller/conf/params_drone.yaml")
+    controller = Controller("/home/felix/Desktop/ws_drone/src/drone_sw/drone_controller/conf/params_drone.yaml", truth = True)
     rate = rospy.Rate(1 / controller.pid.sample_time) # Hz
 
     # Dynamic Parameters
