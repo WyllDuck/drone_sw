@@ -131,12 +131,12 @@ class PID:
         if (np.any(self.output < self.min_output)):
             for i in np.where(self.output < self.min_output):
                 self.output[i] = self.min_output
-                self.ITerm[i] -= self.PTerm * delta_time # Undo the integration
+                self.ITerm[i] -= self.PTerm[i] * delta_time # Undo the integration
 
         if (np.any(self.output > self.max_output)):
             for i in np.where(self.output > self.max_output):
                 self.output[i] = self.max_output
-                self.ITerm[i] -= self.PTerm * delta_time # Undo the integration
+                self.ITerm[i] -= self.PTerm[i] * delta_time # Undo the integration
 
         # Remember for the next calculation
         self.ROS_last_time = self.ROS_current_time
@@ -228,8 +228,12 @@ class Controller:
         self.pub_command3 = rospy.Publisher("/command/3", Float32, queue_size = 1)
         self.pub_command4 = rospy.Publisher("/command/4", Float32, queue_size = 1)
 
+        limits = list()
+        limits.append(np.square(p["bottom_lim"] * 2 * np.pi / 60))
+        limits.append(np.square(p["upper_lim"] * 2 * np.pi / 60))
+
         # Declare PID Module
-        self.pid = PID(0.05, 4) # 20 Hz
+        self.pid = PID(0.01, 4, limits) # 20 Hz
 
         k = p["k"]
         lr = p["lr"]
@@ -260,7 +264,7 @@ class Controller:
         self.lim_roll = np.pi / 4
         self.lim_pitch = np.pi / 4
         self.lim_yaw = np.pi / 4
-        self.lim_thrust = [-5, 10]
+        self.lim_thrust = [0, 20]
 
         # Set Kp, Ki, Kd Arrays
         # NOTE: Thrust must NOT be treated as a PID controller, it is only use to solve the equation, 

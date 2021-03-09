@@ -6,7 +6,7 @@ dictitems:
   Kd_Yaw: 10.0
   Ki_Pitch: 0.0
   Ki_Roll: 0.0
-  Ki_Thrust: 10.0
+  Ki_Thrust: 0.0
   Ki_Yaw: 0.0
   Kp_Pitch: 10.0
   Kp_Roll: 10.0
@@ -20,7 +20,7 @@ dictitems:
       Kd_Yaw: 10.0
       Ki_Pitch: 0.0
       Ki_Roll: 0.0
-      Ki_Thrust: 10.0
+      Ki_Thrust: 0.0
       Ki_Yaw: 0.0
       Kp_Pitch: 10.0
       Kp_Roll: 10.0

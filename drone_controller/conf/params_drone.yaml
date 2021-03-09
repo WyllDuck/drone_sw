@@ -43,3 +43,6 @@ mass: 0.250   # Mass Vehicle           [kg]
 lf: 0.17677 # Distance COG-Front       [m]
 lr: 0.17677 # Distance COG-Rear        [m]
 s: 0.17677  # Distance COG-Side        [m]
+
+upper_lim: 40000    # Upper RPM Limit Motor     [rpm]
+bottom_lim: 0       # Bottom RPM Limit Motor    [rpm]
